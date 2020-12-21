@@ -1,0 +1,61 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <string.h>
+
+int main(int argc, char *argv[])
+{
+        FILE *fileRead, *fileRes;
+        int character, err;
+
+        if( (fileRead=fopen(argv[1],"r"))==NULL )
+               printf("file open error: %s\n", strerror(errno));
+        else
+        {
+                if( (fileRes=fopen(argv[3],"a"))==NULL )
+                {
+                        printf("file open error: %s\n", strerror(errno));
+                        fclose(fileRead);
+                }
+                else
+                {
+                        while( !feof(fileRead) && ferror(fileRead)==0)
+                        {
+                                if((character=fgetc(fileRead))==EOF&&ferror(fileRead)!=0)
+                                        printf("error fgetc\n");
+                                else
+				if(character!=EOF)
+                                {
+                                        if((fputc(character,fileRes))==EOF&&ferror(fileRes)!=0)
+                                                printf("error fputc\n");
+                                }
+                        }
+                        fclose(fileRead);
+                        character=0;
+
+                        if( (fileRead=fopen(argv[2],"r"))==NULL )
+                        {
+                                printf("file open error: %s\n", strerror(errno));
+                                fclose(fileRes);
+                        }
+                        else
+                        {
+                                while( !feof(fileRead) && ferror(fileRead)==0)
+                                {
+                                        if((character=fgetc(fileRead))==EOF&&ferror(fileRead)!=0)
+                                                printf("fgetc error #2\n");
+                                        else
+                                                if(character!=EOF)
+                                                {
+                                                        if((fputc(character,fileRes))==EOF&&ferror(fileRes)!=0)
+                                                                printf("fputc error #2\n");
+                                                }
+                                }
+
+                                fclose(fileRead);
+				fclose(fileRes);
+                        }
+                }
+        }
+        return 0;
+}

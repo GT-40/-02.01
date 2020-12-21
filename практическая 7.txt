@@ -1,0 +1,113 @@
+#include <stdio.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+char* OpenDirectory(char dir_name[FILENAME_MAX], int HowMuch, bool firstTry, char dirName[FILENAME_MAX])
+{
+        char path[FILENAME_MAX];
+        DIR* dir;
+        struct dirent *entry;
+        struct stat stat_info;
+        char* file_name;
+	char* dirName;
+
+	if(firstTry=true)
+	{
+		firstTry=false;
+		HowMuch = CountFiles(path);
+		strcpy(dirName,dir_name);
+	}
+	else if(HowMuch>CountFiles(path))
+	{
+		HowMuch=CountFiles(path);
+		strcpy(dirName,dir_name);
+	}
+
+        if((dir = opendir(dir_name))==NULL)
+                        printf("opendir error: %s\n",strerror(errno));
+        entry=readdir(dir);
+        while (entry!=NULL)
+        {
+                file_name=entry->d_name;
+                strcpy(path,dir_name);
+                strcat(path,"/");
+                strcat(path,file_name);
+                puts(path);
+		
+                if(stat(path,&stat_info)!=0)
+                {
+                        printf("stat error: %s\n",strerror(errno));
+                }
+                else
+		{
+                	if(S_ISDIR(stat_info.st_mode)&&strcmp(file_name,".")!=0&&strcmp(file_name,"..")!=0)
+                        {
+                                dirName = OpenDirectory(path,HowMuch,firstTry,dirName);
+                        }
+                }
+                printf("\n");
+                if((entry=readdir(dir))==NULL&&errno==0)
+                {
+                        printf("readdir error: %s\n",strerror(errno));
+                }
+        }
+        if(closedir(dir)!=0)
+        {
+                printf("closefir error: %s\n",strerror(errno));
+        }
+	return dirName;
+}
+
+int CountFiles(char dir_name[FILENAME_MAX])
+{
+        char path[FILENAME_MAX];
+        DIR* dir;
+        struct dirent *entry;
+        struct stat stat_info;
+        char* file_name;
+	int howMuch;
+
+        if((dir = opendir(dir_name))==NULL)
+                        printf("opendir error: %s\n",strerror(errno));
+        entry=readdir(dir);
+        while (entry!=NULL)
+        {
+                file_name=entry->d_name;
+                strcpy(path,dir_name);
+                strcat(path,"/");
+                strcat(path,file_name);
+                puts(path);
+                if(stat(path,&stat_info)!=0)
+                {
+                        printf("stat error: %s\n",strerror(errno));
+                }
+                else
+		{
+                	if(S_ISREG(stat_info.st_mode)&&file_name[0]!='.')
+                	{
+                        	howMuch++;
+                	}
+                }
+                printf("\n");
+                if((entry=readdir(dir))==NULL&&errno==0)
+                {
+                        printf("readdir error: %s\n",strerror(errno));
+                }
+        }
+        if(closedir(dir)!=0)
+        {
+                printf("closefir error: %s\n",strerror(errno));
+        }
+	return howMuch;
+}
+int main()
+{
+        
+	puts(OpenDirectory(".", 0, true, "."));
+        return 0;
+}

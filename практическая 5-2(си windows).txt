@@ -1,0 +1,336 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stdio.h>
+#include <windows.h>
+#include <tchar.h>
+#include <string.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <strsafe.h>
+
+void OpenDirectory(TCHAR* way);
+
+DWORD WINAPI thread2(LPVOID t)
+{
+	
+	OpenDirectory((TCHAR)t);
+	return 0;
+}
+
+struct list
+{
+	HANDLE hndl;
+	struct list* ptr;
+};
+
+struct list* init(HANDLE h)
+{
+	struct list* lst;
+	lst = (struct list*)malloc(sizeof(struct list));
+	lst->hndl = h;
+	lst->ptr = NULL;
+	return lst;
+}
+
+struct list* addItem(HANDLE h, struct list* lst)
+{
+	struct list* temp, * p;
+	temp = (struct list*)malloc(sizeof(struct list));
+	p = lst->ptr;
+	temp->hndl = h;
+	temp->ptr = p;
+	return temp;
+}
+
+void ErrorExit(LPTSTR lpszFunction)
+{
+	// Retrieve the system error message for the last-error code
+
+	LPVOID lpMsgBuf;
+	LPVOID lpDisplayBuf;
+	DWORD dw = GetLastError();
+
+	FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, dw, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&lpMsgBuf, 0, NULL);
+
+	// Display the error message and exit the process
+
+	lpDisplayBuf = (LPVOID)LocalAlloc(LMEM_ZEROINIT, (lstrlen((LPCTSTR)lpMsgBuf) + lstrlen((LPCTSTR)lpszFunction) + 40) * sizeof(TCHAR));
+	StringCchPrintf((LPTSTR)lpDisplayBuf, LocalSize(lpDisplayBuf) / sizeof(TCHAR), TEXT("%s failed with error %d: %s"), lpszFunction, dw, lpMsgBuf);
+	MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK);
+
+	LocalFree(lpMsgBuf);
+	LocalFree(lpDisplayBuf);
+	ExitProcess(dw);
+}
+
+void changeDirectory(TCHAR currentWay[MAX_PATH], WIN32_FIND_DATA fileData )
+{
+	_tcscat(currentWay, "\\");
+	_tcscat(currentWay, fileData.cFileName);
+
+//	return currentWay;
+}
+
+void renameFile(TCHAR FileName[4095], TCHAR currentWay[MAX_PATH])
+{
+	TCHAR oldWay[MAX_PATH]="";//путь для сохранения старого имени файла для переименовки
+	TCHAR newWay[MAX_PATH]="";//путь для сохранения нового имени файла для переименовки
+	TCHAR newName[4095]="";//строка для отборки и изменения имени файла
+	CHAR characters[] = "EeYyUuIiOoAa";//строка гласных для проверки
+	int num = 0, j = 0, k = 0;//счетчики (num - для сохранения позиции точки)
+	bool y_n = true;//булевская переменная для выхода из цикла если встретилась гласная
+	int err;//переменная для ошибок
+
+	_tcscpy(oldWay, currentWay);
+	_tcscpy(newWay, currentWay);
+	_tcscat(oldWay, "\\");
+	_tcscat(newWay, "\\");
+
+	for (int i = _tcslen(FileName); i > 0 && num == 0; i--)
+	{
+		if (FileName[i] == '.')
+		{
+			num = i;
+		}
+	}
+	//перебираем все буквы в имени файла и не сохраняем только гласные до расширения
+	for (int i = 0; i < num; i++)
+	{
+		while (y_n == true && j != 12)
+		{
+			if (FileName[i] != characters[j])
+			{
+				y_n = true;
+				j++;
+			}
+			else
+			{
+				y_n = false;
+			}
+		}
+		j = 0;
+		if (y_n == true)
+		{
+			newName[k] = FileName[i];
+			k++;
+		}
+		y_n = true;
+	}
+	//копируем расширение
+	if (num != _tcslen(FileName))
+	{
+		for (int i = num; i < _tcslen(FileName); i++)
+		{
+			newName[k] = FileName[i];
+			k++;
+		}
+	}
+	newName[k] = '\0';
+	
+	//переименовываем
+	_tprintf(_T("%s\n"), newName);
+	_tcscat(oldWay, FileName);
+	_tcscat(newWay, newName);
+	_tprintf(_T("%s\n"), oldWay);
+	_tprintf(_T("%s\n"), newWay);
+	err = MoveFile(oldWay, newWay);
+	if (err == 0)
+	{
+		_tprintf(_T("%s>>%s\n"), oldWay, newWay);
+		ErrorExit(TEXT("MoveFile"));
+	}
+	
+	/*_tprintf(_T("%s\n"), oldWay);
+	_tprintf(_T("%s\n"), newWay);*/
+}
+
+void OpenDirectory(TCHAR * way)
+{
+	TCHAR currentWay[MAX_PATH];
+	
+	TCHAR* oldWay[MAX_PATH];//предыдущая директория
+	HANDLE handle_F;
+	WIN32_FIND_DATA File_Data;//характеристика файла
+	int err;//переменная для ошибок
+	byte err_no_files;//переменная для нахождения отсутствия файлов
+	TCHAR FilesWay[MAX_PATH];//текущая директория файла
+	bool firstTry = true;
+	struct list* lst = NULL;
+	HANDLE thread;
+	
+	_tcscpy(oldWay, (TCHAR*)way);
+	//делаем строку для поиска всех файлов
+
+	_tcscpy(FilesWay, oldWay);
+	_tcscat(FilesWay, "\\");
+	_tcscat(FilesWay, "*");
+	//перебираем  файлы
+	handle_F = FindFirstFile(FilesWay, &File_Data);
+
+	if (handle_F != INVALID_HANDLE_VALUE)
+	{
+		do
+		{
+			if (File_Data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			{
+				if (_tcscmp(File_Data.cFileName, "..") != 0 && _tcscmp(File_Data.cFileName, ".") != 0)
+				{
+					_tcscpy(currentWay,oldWay);
+					//File_Data.cFileName;
+					//дополняем путь текущим именем найденной директории 
+					//currentWay=
+					changeDirectory(currentWay, File_Data);
+					//открываем директорию и работаем с ней
+					if (thread = CreateThread(NULL, 0, thread2, (LPVOID)currentWay, 0, NULL)==NULL)
+						ErrorExit(TEXT("CreateThread"));
+					
+					//OpenDirectory(currentWay);
+					if (firstTry)
+					{
+						firstTry = false;
+						lst = init(thread);
+					}
+					else
+					{
+						addItem(thread, lst);
+					}
+					_tcscpy(oldWay,currentWay);
+
+				}
+			}
+			else
+			{
+				//переименовываем файл
+				printf("file: %s", File_Data.cFileName);
+				//renameFile(File_Data.cFileName,currentWay);
+			}
+
+			err = FindNextFile(handle_F, &File_Data);
+			err_no_files = GetLastError();
+			if (err == 0 && err_no_files != ERROR_NO_MORE_FILES)
+				ErrorExit(TEXT("FindNextFile"));
+		} while (err != 0);
+
+		err = FindClose(handle_F);
+		if (err == 0)
+		{
+			ErrorExit(TEXT("FindClose"));
+		}
+	}
+	while (lst != NULL)
+	{
+		if (WaitForSingleObject(lst->hndl, INFINITE) == WAIT_FAILED)
+			ErrorExit(TEXT("WaitForSingleObject"));
+		lst = lst->ptr;
+	};
+	_tcscpy(FilesWay, "\0");
+}
+
+
+
+int main()
+{
+	TCHAR myway[MAX_PATH] = _T("D:\\testFolder");//изначальный путь
+
+	//TCHAR oldWay[4095] = _T("D:\\testFolder\\");//путь для сохранения старого имени файла для переименовки
+	//TCHAR newWay[4095] = _T("D:\\testFolder\\");//путь для сохранения нового имени файла для переименовки
+	//TCHAR path[] = _T("D:\\testFolder\\");//путь для сброса имени предыдущего переименованного файла
+	//HANDLE handleF;
+	//WIN32_FIND_DATA FileData;
+	//TCHAR newName[4095];//строка для отборки и изменения имени файла
+	//CHAR characters[]= "EeYyUuIiOoAa";//строка гласных для проверки
+	//int num = 0,j=0,k=0;//счетчики (num - для сохранения позиции точки)
+	//bool y_n=true;//булевская переменная для выхода из цикла если встретилась гласная
+	//int err;//переменная для ошибок
+	//byte err_no_files;
+	//
+	//handleF = FindFirstFile(myway,&FileData);
+	//
+	//if (handleF!=INVALID_HANDLE_VALUE)
+	//{
+	//	do
+	//	{
+	//		if (!(FileData.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY))
+	//		{
+	//			_tprintf(_T("%s\n"), FileData.cFileName);
+	//			//ищем точку обозначающую расширение
+	//			for (int i = _tcslen(FileData.cFileName); i > 0 && num == 0; i--)
+	//			{
+	//				if (FileData.cFileName[i] == '.')
+	//				{
+	//					num = i;
+	//				}
+	//			}
+	//			//перебираем все буквы в имени файла и не сохраняем только гласные до расширения
+	//			for (int i = 0; i < num; i++)
+	//			{
+	//				while (y_n == true && j != 12)
+	//				{
+	//					if (FileData.cFileName[i] != characters[j])
+	//					{
+	//						y_n = true;
+	//						j++;
+	//					}
+	//					else
+	//					{
+	//						y_n = false;
+	//					}
+	//				}
+	//				j = 0;
+	//				if (y_n == true)
+	//				{
+	//					newName[k] = FileData.cFileName[i];
+	//					k++;
+	//				}
+	//				y_n = true;
+	//			}
+	//			//копируем расширение
+	//			if (num != _tcslen(FileData.cFileName))
+	//			{
+	//				for (int i = num; i < _tcslen(FileData.cFileName); i++)
+	//				{
+	//					newName[k] = FileData.cFileName[i];
+	//					k++;
+	//				}
+	//			}
+	//			//обнуляем счетчики и буферные строки
+	//			newName[k] = '\0';
+	//			k = 0;
+	//			num = 0;
+	//			//переименовываем
+	//			//_tprintf(_T("%s\n"), newName);
+	//			_tcscat(oldWay,FileData.cFileName);
+	//			_tcscat(newWay,newName);
+	//			/*_tprintf(_T("%s\n"), oldWay);
+	//			_tprintf(_T("%s\n"), newWay);*/
+	//			err=MoveFile(oldWay,newWay);
+	//			if (err==0)
+	//			{
+	//				_tprintf(_T("%s>>%s\n"), oldWay,newWay);
+	//				ErrorExit(TEXT("MoveFile"));
+	//			}
+	//			_tcscpy(oldWay,path);
+	//			_tcscpy(newWay,path);
+	//			/*_tprintf(_T("%s\n"), oldWay);
+	//			_tprintf(_T("%s\n"), newWay);*/
+	//		}
+	//		err = FindNextFile(handleF, &FileData);
+	//		err_no_files=GetLastError();
+	//		if (err == 0 && err_no_files!=ERROR_NO_MORE_FILES)
+	//		{
+	//			ErrorExit(TEXT("FindNextFile"));
+	//		}
+	//	} while (err != 0);
+	//	
+	//	err=FindClose(handleF);
+	//	if (err==0)
+	//	{
+	//		ErrorExit(TEXT("FindClose"));
+	//	}
+	//}
+	//else
+	//{
+	//	ErrorExit(TEXT("FindFirstFile"));
+	//}
+	OpenDirectory(myway);
+}
+

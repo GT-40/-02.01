@@ -1,0 +1,140 @@
+#include <stdio.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+
+void ChangeName(char file_name[4095])
+{
+        bool y_n=true;
+        char newName[4095];
+        char characters[]="EeYyUuIiOoAa";
+        int j=0, k=0, num=0;
+
+        for(int i=strlen(file_name);i>0&&num==0;i--)
+        {
+                if(file_name[i]=='.')
+                {
+                        num=i;
+                }
+        }
+
+        if(num==0)
+        {
+                num=strlen(file_name)+1;
+        }
+	for(int i=0; i<num;i++)
+        {
+                while(y_n==true&&j!=12)
+                {
+                        if(file_name[i]!=characters[j])
+                        {
+                                y_n=true;
+                                j++;
+                        }
+                        else
+                        {
+                                y_n=false;
+                        }
+                }
+                j=0;
+                if(y_n==true)
+                {
+                        newName[k]=file_name[i];
+                        k++;
+                }
+                y_n=true;
+        }
+        if(num!=strlen(file_name))
+        {
+                for(int i=num; i<strlen(file_name);i++)
+                {
+                        newName[k]=file_name[i];
+                        k++;
+                }
+	}
+        puts(file_name);
+        puts(newName);
+        if(rename(file_name,newName)==0)
+                printf("rename error: %s\n",strerror(errno));
+        k=0;
+        j=0;
+        num=0;
+}
+
+void OpenDirectory(char dir_name[FILENAME_MAX])
+{
+        char path[FILENAME_MAX];
+        DIR* dir;
+        struct dirent *entry;
+        struct stat stat_info;
+        char* file_name;
+        char file[] = "practicalWork3_1.c";
+        char file_out[] = "a.out";
+
+        if((dir = opendir(dir_name))==NULL)
+                        printf("opendir error: %s\n",strerror(errno));
+        entry=readdir(dir);
+        while (entry!=NULL)
+        {
+                printf ("file/dir: %s\n",entry->d_name);
+                file_name=entry->d_name;
+                strcpy(path,dir_name);
+                strcat(path,"/");
+                strcat(path,file_name);
+                puts(path);
+                if(stat(path,&stat_info)!=0)
+                {
+                        printf("stat error: %s\n",strerror(errno));
+                }
+                else
+		{
+                if(S_ISREG(stat_info.st_mode)&&file_name[0]!='.')
+                {
+                        if(strcmp(file_name,file)!=0&&strcmp(file_name,file_out)!=0)
+                        {
+                                printf("file:%s\n",entry->d_name);
+                                ChangeName(file_name);
+                        }
+                }
+                else
+                {
+                        if(S_ISDIR(stat_info.st_mode)&&strcmp(file_name,".")!=0&&strcmp(file_name,"..")!=0)
+                        {
+                                printf("dir:%s\n",file_name);
+                                pid = fork();
+				if (pid < 0)
+					printf("fork error: %s\n", strerror(errno))
+				else if (pid = 0)
+					{
+						if((dir = opendir(dir_name))==NULL)
+                        				printf("opendir error: %s\n",strerror(errno));
+					}
+				else if (pid >0)
+					if (waitpid(pid, &status, 0)<=0)
+						printf("waitpid error: %s\n", strerror(errno));
+
+                        }
+                }
+                }
+                printf("\n");
+                if((entry=readdir(dir))==NULL&&errno==0)
+                {
+                        printf("readdir error: %s\n",strerror(errno));
+                }
+        }
+        if(closedir(dir)!=0)
+        {
+                printf("closefir error: %s\n",strerror(errno));
+        }
+}
+
+int main()
+{
+        OpenDirectory(".");
+        return 0;
+}
